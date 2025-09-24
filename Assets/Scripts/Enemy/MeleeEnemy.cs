@@ -4,26 +4,26 @@ public class MeleeEnemy : MonoBehaviour
 {
     [Header("Attack")]
     [SerializeField] private float attackCooldown = 1f;
-    [SerializeField] private float range = 1f;
+    [SerializeField] private float range = 1.5f; 
     [SerializeField] private int damage = 1;
 
     [Header("Detection")]
-    [SerializeField] private float colliderDistance = 1f;
-    [SerializeField] private BoxCollider2D boxCollider; 
+    [SerializeField] private float heightMultiplier = 1f; 
+    [SerializeField] private BoxCollider2D boxCollider;
     [SerializeField] private LayerMask playerLayer;
 
     [Header("Patrol (optionnel)")]
-    [SerializeField] private MonoBehaviour enemyPatrol; 
+    [SerializeField] private MonoBehaviour enemyPatrol;
+
     private float cooldownTimer = Mathf.Infinity;
     private Animator anim;
     private Health playerHealth;
+    private Transform playerTransform;
 
     private void Awake()
     {
         anim = GetComponent<Animator>();
-
-        if (boxCollider == null)
-            boxCollider = GetComponent<BoxCollider2D>();
+        if (boxCollider == null) boxCollider = GetComponent<BoxCollider2D>();
     }
 
     private void Update()
@@ -46,18 +46,42 @@ public class MeleeEnemy : MonoBehaviour
     {
         if (boxCollider == null) return false;
 
-        Vector3 dir = transform.right * transform.localScale.x;
-        Vector3 center = boxCollider.bounds.center + dir * range * colliderDistance;
-        Vector3 size = new Vector3(boxCollider.bounds.size.x * range,
-                                   boxCollider.bounds.size.y,
-                                   boxCollider.bounds.size.z);
+        Vector3 center = boxCollider.bounds.center;
+        Vector3 size = new Vector3(
+            boxCollider.bounds.size.x * range,
+            boxCollider.bounds.size.y * heightMultiplier,
+            boxCollider.bounds.size.z
+        );
 
-        RaycastHit2D hit = Physics2D.BoxCast(center, size, 0f, Vector2.left, 0f, playerLayer);
+        Collider2D[] hits = Physics2D.OverlapBoxAll(center, size, 0f, playerLayer);
+        if (hits.Length == 0)
+        {
+            playerHealth = null;
+            playerTransform = null;
+            return false;
+        }
 
-        if (hit.collider != null)
-            playerHealth = hit.transform.GetComponent<Health>();
+        var hit = hits[0];
+        playerHealth = hit.GetComponent<Health>();
+        playerTransform = hit.transform;
 
-        return hit.collider != null;
+        FaceTarget(playerTransform.position);
+
+        return true;
+    }
+
+    private void FaceTarget(Vector3 targetPos)
+    {
+        float dir = Mathf.Sign(targetPos.x - transform.position.x);
+        if (dir == 0f) return;
+
+        Vector3 s = transform.localScale;
+        float sign = Mathf.Sign(s.x);
+        if (sign != dir)
+        {
+            s.x = Mathf.Abs(s.x) * dir;
+            transform.localScale = s;
+        }
     }
 
     private void OnDrawGizmosSelected()
@@ -66,19 +90,21 @@ public class MeleeEnemy : MonoBehaviour
         if (boxCollider == null) return;
 
         Gizmos.color = Color.red;
-
-        Vector3 dir = transform.right * transform.localScale.x;
-        Vector3 center = boxCollider.bounds.center + dir * range * colliderDistance;
-        Vector3 size = new Vector3(boxCollider.bounds.size.x * range,
-                                   boxCollider.bounds.size.y,
-                                   boxCollider.bounds.size.z);
-
+        Vector3 center = boxCollider.bounds.center;
+        Vector3 size = new Vector3(
+            boxCollider.bounds.size.x * range,
+            boxCollider.bounds.size.y * heightMultiplier,
+            boxCollider.bounds.size.z
+        );
         Gizmos.DrawWireCube(center, size);
     }
 
     private void DamagePlayer()
     {
-        if (playerHealth != null && PlayerInSight())
-            playerHealth.TakeDamage(damage);
+        if (playerHealth != null && playerTransform != null)
+        {
+            if (PlayerInSight())
+                playerHealth.TakeDamage(damage);
+        }
     }
 }
